@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>在线 24 点</title>
+<style>
+:root{--bg:#0b0c10;--fg:#e8f0fe;--muted:#9aa0a6;--accent:#8ab4f8}
+@media (prefers-color-scheme: light){:root{--bg:#f7f8fa;--fg:#202124;--muted:#5f6368;--accent:#1a73e8}}
+
+body[data-theme="dark"]{--bg:#0b0c10;--fg:#e8f0fe;--muted:#9aa0a6;--accent:#8ab4f8}
+body[data-theme="light"]{--bg:#f7f8fa;--fg:#202124;--muted:#5f6368;--accent:#1a73e8}
+
+*{box-sizing:border-box}
+body{margin:0;font-family:Avenir,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans CJK SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg)}
+.app{max-width:1080px;margin:24px auto;padding:16px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #999;color:#999;margin-bottom:12px}
+.badge.ok{color:#0f0;background:#093;border-color:#0f0}
+.tabs{display:flex;gap:8px;margin:0 0 12px}
+.tab{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.2);cursor:pointer;color:var(--muted)}
+.tab.active{color:var(--fg);border-color:rgba(138,180,248,.35);background:rgba(138,180,248,.08)}
+.card{background:rgba(255,255,255,.06);backdrop-filter:blur(10px);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:0 10px 40px rgba(0,0,0,.18)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;gap:8px}
+.nums{grid-template-columns:repeat(4,1fr)}
+.tile{border-radius:12px;padding:12px 0;text-align:center;background:rgba(255,255,255,.08);cursor:pointer;border:1px solid rgba(255,255,255,.15);user-select:none;font-weight:800}
+.expr{min-height:40px;border-radius:12px;padding:8px 10px;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.2);word-wrap:anywhere}
+.keypad{grid-template-columns:repeat(6,1fr)}
+.key{padding:10px 0;border-radius:10px;background:rgba(255,255,255,.06);text-align:center;cursor:pointer;border:1px solid rgba(255,255,255,.15);user-select:none}
+.key.wide{grid-column:span 2}
+button{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);color:white;border-color:transparent}
+.pill{padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);display:inline-flex;gap:6px;align-items:center}
+.meta{color:var(--muted)}
+.status{min-height:24px}
+.list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto}
+.li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+.score{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="row" style="justify-content:space-between;margin-bottom:8px">
+    <div id="jsBadge" class="badge">JS 未初始化</div>
+    <button id="themeToggle" class="pill" title="切换暗黑/白天模式">🌙 暗黑模式</button>
+  </div>
+
+  <div class="tabs">
+    <div id="tabSolo" class="tab active">单机</div>
+    <div id="tabMulti" class="tab">多人</div>
+  </div>
+
+  <div id="soloPane">
+    <div class="card">
+      <h2>单机模式</h2>
+      <div class="row">
+        <span class="pill">题 <b id="soloQn">0</b>/10</span>
+        <span class="pill">par：<span id="soloPar" class="score">—</span>s</span>
+        <span class="pill">用时：<span id="soloTime" class="score">0.0</span>s</span>
+        <span id="soloStatus" class="pill">状态：等待开始</span>
+      </div>
+      <div id="soloNums" class="grid nums"></div>
+      <div id="soloExpr" class="expr"></div>
+      <div id="soloKeypad" class="grid keypad"></div>
+      <div class="row">
+        <button id="btnStartSolo" class="primary">开始 10 题</button>
+        <button id="btnSubmitSolo">提交当前题</button>
+        <button id="btnNextSolo">下一题</button>
+        <button id="btnResetSolo">重置本题</button>
+        <button id="btnClearSolo">清空式子</button>
+        <button id="btnUndoSolo">撤销</button>
+        <button id="btnHintSolo">看一个可行式子</button>
+      </div>
+      <div class="meta status" id="soloDiag"></div>
+    </div>
+  </div>
+
+  <div id="multiPane" style="display:none">
+    <div class="card">
+      <h2>多人对战</h2>
+      <div class="row">
+        <span class="pill">服务器：<b>24worker.lzraylzraylzray.workers.dev</b></span>
+        <span id="hostBadge" class="pill">身份：访客</span>
+      </div>
+
+      <div class="row">
+        <div style="width:140px">
+          <label class="meta">房间号</label>
+          <input id="mRoom" type="text" maxlength="8" placeholder="如 5D4K"
+                 style="width:100%;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.05);color:var(--fg)">
+        </div>
+        <div style="width:160px">
+          <label class="meta">昵称</label>
+          <input id="mNick" type="text" maxlength="16" placeholder="Guest"
+                 style="width:100%;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.05);color:var(--fg)">
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="btnCreateRoom">创建房间</button>
+        <button id="btnJoinRoom">加入房间</button>
+        <button id="btnStartMatch" disabled class="primary">主持人：开始发题</button>
+        <button id="btnAgree" disabled>同意开始下一轮</button>
+        <button id="btnResetRound" disabled>主持人：重置开新一轮</button>
+        <span id="mConn" class="pill">未连接</span>
+      </div>
+
+      <div class="row">
+        <span class="pill">题 <b id="mQn">0</b>/10</span>
+        <span class="pill">par：<span id="mPar" class="score">—</span>s</span>
+        <span class="pill">用时：<span id="mTime" class="score">0.0</span>s</span>
+        <span id="mStatus" class="pill">等待开始</span>
+      </div>
+
+      <div id="mNums" class="grid nums"></div>
+      <div id="mExpr" class="expr"></div>
+      <div id="mKeypad" class="grid keypad"></div>
+
+      <div class="row">
+        <button id="mSubmit">提交</button>
+        <button id="mNext">下一题</button>
+        <button id="mReset">重置本题</button>
+        <button id="mClear">清空式子</button>
+        <button id="mUndo">撤销</button>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <h3 style="margin:6px 0 10px">房间内玩家</h3>
+        <div class="list" id="players"></div>
+      </div>
+
+      <div class="meta status" id="mDiag"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORKER_BASE = "https://24worker.lzraylzraylzray.workers.dev";
+const WS_BASE = WORKER_BASE.replace(/^http/i,"ws");
+
+const OPS = [
+  { sym:"+", f:(a,b)=>a+b },
+  { sym:"-", f:(a,b)=>a-b },
+  { sym:"×", f:(a,b)=>a*b },
+  { sym:"÷", f:(a,b)=>b===0?null:a/b }
+];
+
+function approxEqual(a,b){ return Math.abs(a-b) < 1e-6 }
+function wrap(a){ return typeof a==="number" ? {v:a,s:String(a)} : a }
+function combine(a,b){
+  const A = wrap(a), B = wrap(b), out=[];
+  for(const op of OPS){
+    const v1 = op.f(A.v,B.v);
+    if(v1!==null) out.push({v:v1,s:`${A.s||A}${op.sym}${B.s||B}`});
+    if(op.sym==="-"||op.sym==="÷"){
+      const v2 = op.f(B.v,A.v);
+      if(v2!==null) out.push({v:v2,s:`${B.s||B}${op.sym}${A.s||A}`});
+    }
+  }
+  return out;
+}
+function* pickPairs(arr){ for(let i=0;i<arr.length;i++) for(let j=i+1;j<arr.length;j++) yield [i,j] }
+function solve24(nums,target=24){
+  function search(list){
+    if(list.length===1){
+      const v = wrap(list[0]).v;
+      return approxEqual(v,target) ? wrap(list[0]).s : null;
+    }
+    for(const [i,j] of pickPairs(list)){
+      const rest=[]; for(let k=0;k<list.length;k++) if(k!==i&&k!==j) rest.push(list[k]);
+      const combs=combine(list[i],list[j]);
+      for(const c of combs){ const hit=search([...rest,c]); if(hit) return hit; }
+    }
+    return null;
+  }
+  const any = search(nums);
+  return { found:!!any, any };
+}
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a }
+function genSolvablePuzzle(){
+  for(let t=0;t<300;t++){
+    const arr=[ri(1,13),ri(1,13),ri(1,13),ri(1,13)];
+    const s=solve24(arr);
+    if(s.found) return { nums:arr, hint:s.any };
+  }
+  return { nums:[1,5,5,5], hint:"(5-1)×(5+5)" };
+}
+
+const W = {
+  base: { "+":1.0, "-":1.4, "*":1.2, "/":2.4 },
+  exact_div_bonus: -0.7,
+  fraction_penalty: 1.0,
+  neg_or_big_penalty: 0.5,
+  depth_step: 0.2,
+  hit24_bonus: -2.0,
+  hook_bonus: { 12:-1.2, 8:-1.0, 6:-0.9, 4:-0.7, 3:-0.6, 2:-0.5 },
+  context_pair_bonus: {
+    12:[2,-0.7],
+    8:[3,-0.7],
+    6:[4,-0.7],
+    4:[6,-0.6],
+    3:[8,-0.6],
+    2:[12,-0.6],
+  },
+  multiple_solutions_log: 0.0
+};
+
+function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ const t=a%b; a=b; b=t; } return a||1; }
+function norm(n,d){
+  if(d===0) return {n:NaN,d:NaN};
+  if(n===0) return {n:0,d:1};
+  if(d<0){ n=-n; d=-d; }
+  const g=gcd(n,d);
+  return {n:n/g,d:d/g};
+}
+function F(x){ return {n:Math.trunc(x), d:1}; }
+function addF(a,b){ return norm(a.n*b.d+b.n*a.d, a.d*b.d); }
+function subF(a,b){ return norm(a.n*b.d-b.n*a.d, a.d*b.d); }
+function mulF(a,b){ return norm(a.n*b.n, a.d*b.d); }
+function divF(a,b){ if(b.n===0) return null; return norm(a.n*b.d, a.d*b.n); }
+function isIntF(a){ return a.d===1; }
+function valF(a){ return a.n/a.d; }
+function eqIntF(a, k){ return a.d===1 && a.n===k; }
+
+function cmpF(a,b){ const t=a.n*b.d - b.n*a.d; return t<0?-1:t>0?1:0; }
+function canon(state){
+  const arr = state.map(x=>norm(x.n,x.d));
+  arr.sort(cmpF);
+  return arr;
+}
+function keyOf(state){ return state.map(x=>x.n+"/"+x.d).join("|"); }
+
+function combineFrac(a,b){
+  const out=[];
+  out.push({op:"+", r:addF(a,b), A:a, B:b});
+  out.push({op:"*", r:mulF(a,b), A:a, B:b});
+  out.push({op:"-", r:subF(a,b), A:a, B:b});
+  out.push({op:"-", r:subF(b,a), A:b, B:a});
+  const r1=divF(a,b); if(r1) out.push({op:"/", r:r1, A:a, B:b});
+  const r2=divF(b,a); if(r2) out.push({op:"/", r:r2, A:b, B:a});
+  return out;
+}
+
+function scoreStep(op, A, B, R, depth, remaining){
+  let s = W.base[op];
+  if(op==="/" && isIntF(A) && isIntF(B) && B.n!==0 && A.n % B.n === 0){
+    s += W.exact_div_bonus;
+  }
+  if(!isIntF(R)) s += W.fraction_penalty;
+  const vR = valF(R);
+  if(vR<0 || Math.abs(vR)>50) s += W.neg_or_big_penalty;
+  if(depth>1) s += (depth-1)*W.depth_step;
+  if(eqIntF(R,24)) s += W.hit24_bonus;
+  const hooks = W.hook_bonus;
+  const hkeys = [12,8,6,4,3,2];
+  for(const k of hkeys){
+    if(eqIntF(R,k)){ s += hooks[k]; break; }
+  }
+  // context pair bonus
+  for(const k of hkeys){
+    if(eqIntF(R,k)){
+      const [want,bonus] = W.context_pair_bonus[k];
+      const has = remaining.some(x=>eqIntF(x,want));
+      if(has) s += bonus;
+      break;
+    }
+  }
+  return s;
+}
+
+function bestCostForState(state, memo){
+  const depth = 5 - state.length;
+  if(state.length===1){
+    return eqIntF(state[0],24) ? 0.0 : Infinity;
+  }
+  const k = keyOf(state);
+  if(memo.has(k)) return memo.get(k);
+
+  let best = Infinity;
+  for(let i=0;i<state.length;i++){
+    for(let j=i+1;j<state.length;j++){
+      const a=state[i], b=state[j];
+      const rest = [];
+      for(let t=0;t<state.length;t++) if(t!==i && t!==j) rest.push(state[t]);
+      const combs = combineFrac(a,b);
+      for(const c of combs){
+        const step = scoreStep(c.op, c.A, c.B, c.r, depth, rest);
+        const newState = canon([...rest, c.r]);
+        const sub = bestCostForState(newState, memo);
+        if(isFinite(sub)){
+          const total = step + sub;
+          if(total < best) best = total;
+        }
+      }
+    }
+  }
+  memo.set(k,best);
+  return best;
+}
+
+function difficultyCost(nums){
+  const init = canon(nums.map(x=>F(x)));
+  const memo = new Map();
+  const cost = bestCostForState(init, memo);
+  return cost;
+}
+
+function parLike(nums){
+  const x = difficultyCost(nums);
+  const par = Math.round(13 + Math.log2(x + 3) * 10);
+  return par;
+}
+
+
+const $ = q => document.querySelector(q);
+function el(tag,cls,text){ const d=document.createElement(tag); if(cls)d.className=cls; if(text!=null)d.textContent=text; return d }
+
+function makeTimer(updateCb){
+  let start=0, running=false, raf=0;
+  function tick(){
+    if(!running) return;
+    const t = (performance.now()-start)/1000;
+    updateCb(t);
+    raf=requestAnimationFrame(tick);
+  }
+  return {
+    start(){ start=performance.now(); running=true; tick() },
+    stop(){ running=false; if(raf) cancelAnimationFrame(raf) },
+    isRunning(){ return running }
+  }
+}
+
+function setTab(which){
+  if(which==="solo"){
+    $("#tabSolo").classList.add("active");
+    $("#tabMulti").classList.remove("active");
+    $("#soloPane").style.display="block";
+    $("#multiPane").style.display="none";
+  }else{
+    $("#tabMulti").classList.add("active");
+    $("#tabSolo").classList.remove("active");
+    $("#multiPane").style.display="block";
+    $("#soloPane").style.display="none";
+  }
+}
+
+function initTheme(){
+  const saved = localStorage.getItem("theme"); // 'light' | 'dark' | null
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const initial = saved || (prefersDark ? "dark" : "light");
+  applyTheme(initial, false);
+  $("#themeToggle").addEventListener("click", ()=>{
+    const cur = document.body.getAttribute("data-theme")==="dark" ? "dark" : "light";
+    const next = cur==="dark" ? "light" : "dark";
+    applyTheme(next, true);
+  });
+}
+function applyTheme(theme, persist){
+  document.body.setAttribute("data-theme", theme);
+  if(persist) localStorage.setItem("theme", theme);
+  const btn = $("#themeToggle");
+  if(btn){
+    btn.textContent = theme==="dark" ? "☀️ 白天模式" : "🌙 暗黑模式";
+    btn.title = "切换为" + (theme==="dark" ? "白天模式" : "暗黑模式");
+  }
+}
+
+window.addEventListener("DOMContentLoaded",()=>{
+  initTheme();
+
+  const badge=$("#jsBadge");
+  badge.textContent="JS 已初始化";
+  badge.classList.add("ok");
+
+  $("#tabSolo").onclick=()=>setTab("solo");
+  $("#tabMulti").onclick=()=>setTab("multi");
+
+  let solo={qn:0,total:10,wins:0,parSum:0,timeSum:0,current:null,exprOk:false};
+  let soloTimer=makeTimer(t=>{$("#soloTime").textContent=t.toFixed(1)});
+
+  function renderNumsSolo(nums){
+    const eln=$("#soloNums");
+    eln.innerHTML="";
+    nums.forEach(n=>{
+      const d=el("div","tile",String(n));
+      d.addEventListener("click",()=>{$("#soloExpr").textContent+=String(n)});
+      eln.appendChild(d);
+    });
+  }
+  function keypadSolo(){
+    const keys=["(",")","+","-","×","÷"];
+    const elk=$("#soloKeypad");
+    elk.innerHTML="";
+    keys.forEach(k=>{
+      const b=el("div","key",k);
+      b.onclick=()=>{$("#soloExpr").textContent+=k};
+      elk.appendChild(b);
+    });
+    const back=el("div","key wide","⌫ 退格");
+    back.onclick=()=>{const box=$("#soloExpr");box.textContent=box.textContent.slice(0,-1)};
+    elk.appendChild(back);
+  }
+  function resetSoloExpr(){ $("#soloExpr").textContent="" }
+
+  function checkExpr(exprText,nums){
+    const numsInExpr=exprText.match(/\d+/g)||[];
+    for(const tok of numsInExpr){
+      const v=Number(tok);
+      if(!(v>=1&&v<=13)) return {ok:false,message:"只能使用 1~13 的数字"};
+    }
+    const pool=nums.slice().map(String);
+    for(const tok of numsInExpr){
+      const idx=pool.indexOf(String(Number(tok)));
+      if(idx===-1) return {ok:false,message:"使用了非题面数字或重复使用"};
+      pool.splice(idx,1);
+    }
+    if(pool.length>0) return {ok:false,message:"未使用完四个数字"};
+    const safe=exprText.replace(/÷/g,"/").replace(/×/g,"*");
+    try{
+      const v=new Function("return ("+safe+")")();
+      if(!isFinite(v)) return {ok:false,message:"运算得到非有限值"};
+      const ok=Math.abs(v-24)<1e-6;
+      return {ok,message:ok?"OK":"结果为 "+v};
+    }catch(e){
+      return {ok:false,message:"表达式语法错误"};
+    }
+  }
+
+  function nextSolo(first){
+    soloTimer.stop();
+    if(!first&&solo.current){
+      const t=parseFloat($("#soloTime").textContent)||0;
+      if(solo.exprOk){
+        solo.timeSum+=t;
+        solo.parSum+=solo.current.par;
+        solo.wins+=(t<=solo.current.par?1:0);
+        $("#soloStatus").textContent=t<=solo.current.par?"本题：胜 ✅":"本题：负 ❌";
+      }else{
+        $("#soloStatus").textContent="本题：未提交/错误";
+      }
+    }
+    if(solo.qn>=solo.total){
+      $("#soloDiag").textContent=`结束：胜场 ${solo.wins}/10，总用时 ${solo.timeSum.toFixed(1)}s / par 总和 ${solo.parSum}s`;
+      return;
+    }
+    solo.qn++;
+    const pz=genSolvablePuzzle();
+    const par=parLike(pz.nums);
+    solo.current={nums:pz.nums,hint:pz.hint,par};
+    solo.exprOk=false;
+
+    $("#soloQn").textContent=solo.qn;
+    $("#soloPar").textContent=par;
+    $("#soloTime").textContent="0.0";
+    $("#soloStatus").textContent="状态：作答中";
+    resetSoloExpr();
+    renderNumsSolo(pz.nums);
+    keypadSolo();
+    soloTimer.start();
+    $("#soloDiag").textContent="";
+  }
+
+  function submitSolo(){
+    if(!solo.current){ $("#soloDiag").textContent="请先开始"; return }
+    const res=checkExpr($("#soloExpr").textContent,solo.current.nums);
+    solo.exprOk=res.ok;
+    $("#soloStatus").textContent=res.ok?"✅ 正确":"❌ "+res.message;
+    if(res.ok) soloTimer.stop();
+  }
+
+  $("#btnStartSolo").onclick=()=>{solo={qn:0,total:10,wins:0,parSum:0,timeSum:0,current:null,exprOk:false};nextSolo(true)};
+  $("#btnSubmitSolo").onclick=submitSolo;
+  $("#btnNextSolo").onclick=()=>nextSolo(false);
+  $("#btnResetSolo").onclick=()=>{$("#soloExpr").textContent="";$("#soloStatus").textContent="状态：作答中";if(!soloTimer.isRunning())soloTimer.start()};
+  $("#btnClearSolo").onclick=()=>$("#soloExpr").textContent="";
+  $("#btnUndoSolo").onclick=()=>{const box=$("#soloExpr");box.textContent=box.textContent.slice(0,-1)};
+  $("#btnHintSolo").onclick=()=>{$("#soloDiag").textContent="可行式子："+(solo.current?solo.current.hint:"（请先开始）")};
+
+  let ws=null, myId=null, connected=false, isHost=false;
+  let m={qn:0,nums:[],par:0,puzzles:[],totalTime:0,finished:false,ready:false,progress:0};
+  let mTimer=makeTimer(t=>{$("#mTime").textContent=t.toFixed(1)});
+  let wsPing=null;
+
+  function renderNumsMulti(nums){
+    const eln=$("#mNums");
+    eln.innerHTML="";
+    nums.forEach(n=>{
+      const d=el("div","tile",String(n));
+      d.onclick=()=>{$("#mExpr").textContent+=String(n)};
+      eln.appendChild(d);
+    });
+  }
+  function keypadMulti(){
+    const keys=["(",")","+","-","×","÷"];
+    const elk=$("#mKeypad");
+    elk.innerHTML="";
+    keys.forEach(k=>{
+      const b=el("div","key",k);
+      b.onclick=()=>{$("#mExpr").textContent+=k};
+      elk.appendChild(b);
+    });
+    const back=el("div","key wide","⌫ 退格");
+    back.onclick=()=>{const box=$("#mExpr");box.textContent=box.textContent.slice(0,-1)};
+    elk.appendChild(back);
+  }
+  function updatePlayers(list){
+    const box=$("#players");
+    box.innerHTML="";
+    list.forEach(p=>{
+      const row=el("div","li");
+      const prog=(p.progress||0)+"/10";
+      const done=p.finished?"✔":"…";
+      const ready=p.ready?"同意":"未同意";
+      const host=p.host?"｜主持人":"";
+      row.innerHTML=`<div>${p.name}${p.id===myId?"（我）":""}${host}</div><div class="meta">进度 ${prog}｜总时 ${("time"in p?Number(p.time).toFixed(1):"0.0")}s｜${done}｜${ready}</div>`;
+      box.appendChild(row);
+    });
+  }
+  function setConn(t,cls){
+    const el=$("#mConn");
+    el.textContent=t;
+    el.className="pill"+(cls?(" "+cls):"");
+  }
+
+  function setButtons(){
+    const allFinished=(lastPlayers||[]).length>0&&(lastPlayers||[]).every(p=>p.finished);
+    const allReady=allFinished&&(lastPlayers||[]).every(p=>p.ready);
+    $("#btnResetRound").disabled=!(isHost&&allReady);
+    $("#btnAgree").disabled=!m.finished||m.ready;
+    $("#mNext").disabled=m.finished||m.qn>=10||m.puzzles.length===0;
+    $("#btnStartMatch").disabled=!(connected&&isHost&&m.puzzles.length===0);
+  }
+  let lastPlayers=[];
+
+  function showQuestion(qn){
+    if(qn<1||qn>10) return;
+    const isNew = (qn !== m.qn);
+    const q = m.puzzles[qn-1];
+    if(isNew){
+      m.qn = qn;
+      m.nums = q.nums;
+      m.par = q.par;
+      $("#mQn").textContent = m.qn;
+      $("#mPar").textContent = m.par;
+      $("#mExpr").textContent = "";
+      renderNumsMulti(m.nums);
+      keypadMulti();
+      $("#mStatus").textContent = "作答中";
+      $("#mTime").textContent = "0.0";
+      mTimer.stop();
+      mTimer.start();
+    }else{
+      $("#mStatus").textContent = "仍在第 "+qn+" 题";
+    }
+  }
+
+  function reflectHost(hostId){
+    isHost=(hostId===myId);
+    $("#hostBadge").textContent="身份："+(isHost?"主持人":"访客");
+    setButtons();
+  }
+
+  function clearWsPing(){
+    if(wsPing){ clearInterval(wsPing); wsPing=null; }
+  }
+
+  function connectWS(){
+    if(ws) try{ws.close()}catch(e){}
+    clearWsPing();
+    const room=($("#mRoom").value||"").trim().toUpperCase();
+    const name=($("#mNick").value||"Guest").trim();
+    if(!room){ $("#mDiag").textContent="请输入房间号"; return }
+    ws=new WebSocket(`${WS_BASE}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`);
+    ws.onopen=()=>{
+      connected=true;
+      setConn("已连接","good");
+      $("#mStatus").textContent="已连接，等待开始";
+      clearWsPing();
+      wsPing=setInterval(()=>{
+        try{ if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:"ping",t:Date.now()})); }catch(e){}
+      },10000);
+    };
+    ws.onclose=ev=>{
+      connected=false;
+      clearWsPing();
+      setConn(`连接已断开 (code=${ev.code}${ev.reason?", reason="+ev.reason:""})`,"bad");
+      $("#mDiag").textContent=`WS close code=${ev.code} reason=${ev.reason||"(none)"}`;
+      setButtons();
+    };
+    ws.onerror=e=>{
+      $("#mDiag").textContent="WS error: "+(e.message||e.type||e);
+    };
+    ws.onmessage=ev=>{
+      const msg=JSON.parse(ev.data);
+      if(msg.type==="hello"){
+        myId=msg.id;
+        updatePlayers(msg.players);
+        reflectHost(msg.hostId||null);
+      }
+      if(msg.type==="players"){
+        lastPlayers=msg.players||[];
+        updatePlayers(msg.players);
+        reflectHost(msg.hostId||null);
+      }
+      if(msg.type==="start"){
+        m={qn:0,nums:[],par:0,puzzles:msg.puzzles||[],totalTime:0,finished:false,ready:false,progress:0};
+        $("#mDiag").textContent="对战开始";
+        $("#mQn").textContent="0";
+        setButtons();
+        if(ws&&ws.readyState===1){ ws.send(JSON.stringify({type:"next"})) }
+      }
+      if(msg.type==="question"){
+        showQuestion(msg.qn);
+      }
+      if(msg.type==="verdict"){
+        if(msg.ok){
+          const t=parseFloat($("#mTime").textContent)||0;
+          m.totalTime+=t;
+          m.progress=msg.qn;
+          $("#mStatus").textContent="✅ 正确";
+          mTimer.stop();
+          if(m.qn>=10){ m.finished=true; setButtons() }
+        }else{
+          $("#mStatus").textContent="❌ "+(msg.reason||"错误");
+        }
+      }
+      if(msg.type==="end"){
+        const rank=msg.ranking||[];
+        $("#mDiag").textContent="本轮结束："+rank.join("  ");
+        mTimer.stop();
+        m.finished=true;
+        setButtons();
+      }
+      if(msg.type==="reset"){
+        m={qn:0,nums:[],par:0,puzzles:[],totalTime:0,finished:false,ready:false,progress:0};
+        $("#mDiag").textContent="已重置，等待开始";
+        $("#mQn").textContent="0";
+        $("#mPar").textContent="—";
+        $("#mTime").textContent="0.0";
+        $("#mExpr").textContent="";
+        $("#mNums").innerHTML="";
+        $("#mKeypad").innerHTML="";
+        $("#mStatus").textContent="等待开始";
+        setButtons();
+      }
+      if(msg.type==="pong"){ }
+    };
+  }
+
+  $("#btnCreateRoom").onclick=async()=>{
+    try{
+      const r=await fetch(WORKER_BASE+"/create-room",{method:"POST"});
+      const j=await r.json();
+      $("#mRoom").value=j.room||"";
+      $("#mDiag").textContent="房间已创建："+(j.room||"");
+      connectWS();
+    }catch(e){
+      $("#mDiag").textContent="创建失败："+e;
+    }
+  };
+  $("#btnJoinRoom").onclick=connectWS;
+
+  $("#btnStartMatch").onclick=()=>{ if(connected&&isHost){ ws.send(JSON.stringify({type:"start"})) } };
+
+  $("#mSubmit").onclick=()=>{
+    if(m.qn===0) return;
+    const expr = $("#mExpr").textContent;
+    const res = checkExpr(expr, m.nums);
+    if(res.ok){
+      $("#mStatus").textContent = "✅ 正确";
+      const t = parseFloat($("#mTime").textContent) || 0;
+      mTimer.stop();
+      if(ws&&ws.readyState===1){
+        ws.send(JSON.stringify({type:"submit", ok:true, time:t, qn:m.qn, expr}));
+      }
+    }else{
+      $("#mStatus").textContent = "❌ " + res.message;
+      const t = parseFloat($("#mTime").textContent) || 0;
+      if(ws&&ws.readyState===1){
+        ws.send(JSON.stringify({type:"submit", ok:false, time:t, qn:m.qn, expr}));
+      }
+    }
+  };
+
+  $("#mNext").onclick=()=>{ if(m.finished||m.qn>=10||m.puzzles.length===0) return; ws?.send(JSON.stringify({type:"next"})) };
+
+  $("#mReset").onclick=()=>{
+    if(!mTimer.isRunning()){
+      $("#mExpr").textContent="";
+      $("#mStatus").textContent="作答中";
+      mTimer.start();
+    }
+  };
+  $("#mClear").onclick=()=>{ $("#mExpr").textContent="" };
+  $("#mUndo").onclick=()=>{ const box=$("#mExpr"); box.textContent=box.textContent.slice(0,-1) };
+  $("#btnAgree").onclick=()=>{ if(m.finished){ m.ready=true; ws?.send(JSON.stringify({type:"ready",v:true})); $("#mDiag").textContent="已同意，等待所有人"; setButtons() } };
+  $("#btnResetRound").onclick=()=>{ if(connected&&isHost) ws?.send(JSON.stringify({type:"reset"})) };
+});
+</script>
+</body>
+</html>
+
+</body>
+</html>
+
