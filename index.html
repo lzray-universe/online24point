@@ -150,12 +150,15 @@ function approxEqual(a,b){ return Math.abs(a-b) < 1e-6 }
 function wrap(a){ return typeof a==="number" ? {v:a,s:String(a)} : a }
 function combine(a,b){
   const A = wrap(a), B = wrap(b), out=[];
+  const fmt = s => /[+\-×÷]/.test(s) ? `(${s})` : s;
   for(const op of OPS){
+    const As = fmt(A.s||String(A));
+    const Bs = fmt(B.s||String(B));
     const v1 = op.f(A.v,B.v);
-    if(v1!==null) out.push({v:v1,s:`${A.s||A}${op.sym}${B.s||B}`});
+    if(v1!==null) out.push({v:v1,s:`${As}${op.sym}${Bs}`});
     if(op.sym==="-"||op.sym==="÷"){
       const v2 = op.f(B.v,A.v);
-      if(v2!==null) out.push({v:v2,s:`${B.s||B}${op.sym}${A.s||A}`});
+      if(v2!==null) out.push({v:v2,s:`${Bs}${op.sym}${As}`});
     }
   }
   return out;
